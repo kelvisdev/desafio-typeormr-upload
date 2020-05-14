@@ -1,10 +1,8 @@
-// import AppError from '../errors/AppError';
-
 import { getCustomRepository } from 'typeorm';
 import Transaction from '../models/Transaction';
 import TransactionsRepository from '../repositories/TransactionsRepository';
 import CategoriesRepository from '../repositories/CategoriesRepository';
-import Category from '../models/Category';
+import AppError from '../errors/AppError';
 
 interface Request {
   title: string;
@@ -22,17 +20,20 @@ class CreateTransactionService {
   }: Request): Promise<Transaction> {
     const transactionsRepository = getCustomRepository(TransactionsRepository);
     const categoriesRepository = getCustomRepository(CategoriesRepository);
-    let categoryEntity = new Category();
 
-    const findCategoryInSameTitle = await categoriesRepository.findOne({
+    const { total } = await transactionsRepository.getBalance();
+
+    if (type === 'outcome' && total < value) {
+      throw new AppError('You do not have enougth balance.');
+    }
+
+    let categoryEntity = await categoriesRepository.findOne({
       where: {
         title: category,
       },
     });
 
-    if (findCategoryInSameTitle) {
-      categoryEntity.id = findCategoryInSameTitle.id;
-    } else {
+    if (!categoryEntity) {
       categoryEntity = categoriesRepository.create({
         title: category,
       });
@@ -40,12 +41,13 @@ class CreateTransactionService {
       await categoriesRepository.save(categoryEntity);
     }
 
-    const category_id = categoryEntity.id;
+    // const category_id = categoryEntity.id;
     const transaction = transactionsRepository.create({
       type,
       title,
       value,
-      category_id,
+      category: categoryEntity,
+      // category_id,
     });
 
     await transactionsRepository.save(transaction);
